@@ -119,13 +119,15 @@ ImagesType = Union[str, np.ndarray, Sequence[str], Sequence[np.ndarray]]
 
 
 def inference_detector(model: nn.Module,
-                       pcds: PointsType) -> Union[Det3DDataSample, SampleList]:
+                       pcds: PointsType,
+                       verbose: bool = False) -> Union[Det3DDataSample, SampleList]:
     """Inference point cloud with the detector.
 
     Args:
         model (nn.Module): The loaded detector.
         pcds (str, ndarray, Sequence[str/ndarray]):
             Either point cloud files or loaded point cloud.
+        verbose (bool): Whether to print the data size and latency.
 
     Returns:
         :obj:`Det3DDataSample` or list[:obj:`Det3DDataSample`]:
@@ -176,10 +178,27 @@ def inference_detector(model: nn.Module,
         data.append(data_)
 
     collate_data = pseudo_collate(data)
+    if verbose:
+        print(f'Number of points: {collate_data["inputs"]["points"][0].shape[0]}')
 
     # forward the model
     with torch.no_grad():
-        results = model.test_step(collate_data)
+        if verbose:
+            from time import time
+            warmup = 5
+            for _ in range(warmup):
+                _ = model.test_step(collate_data)
+
+            repeat = 10
+            avg = 0
+            for _ in range(repeat):
+                start = time()
+                results = model.test_step(collate_data)
+                avg += time() - start
+            avg /= repeat
+            print(f'Latency: {avg * 1000:.2f} ms')
+        else:
+            results = model.test_step(collate_data)
 
     if not is_batch:
         return results[0], data[0]
