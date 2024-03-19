@@ -685,9 +685,9 @@ class DSVTCenterHead(CenterHead):
                     top_labels.device)
                 # Mind this when training on the new coordinate
                 # Transform to old mmdet3d coordinate
-                boxes_for_nms[:, 4] = (-boxes_for_nms[:, 4] + torch.pi / 2 * 1)
+                boxes_for_nms[:, 4] = (-boxes_for_nms[:, 4] + math.pi / 2 * 1)
                 boxes_for_nms[:, 4] = (boxes_for_nms[:, 4] +
-                                       torch.pi) % (2 * torch.pi) - torch.pi
+                                       math.pi) % (2 * math.pi) - math.pi
 
                 for i, nms_thr in enumerate(self.test_cfg['nms_thr'][task_id]):
                     label_mask = top_labels == i
