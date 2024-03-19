@@ -1111,7 +1111,8 @@ class PointSample(BaseTransform):
             self.sample_range,
             self.replace,
             return_choices=True)
-        input_dict['points'] = points
+        if self.num_points != 16384:
+            input_dict['points'] = points
 
         pts_instance_mask = input_dict.get('pts_instance_mask', None)
         pts_semantic_mask = input_dict.get('pts_semantic_mask', None)
