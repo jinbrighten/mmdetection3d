@@ -182,6 +182,7 @@ def inference_detector(model: nn.Module,
         print(f'Number of points: {collate_data["inputs"]["points"][0].shape[0]}')
 
     # forward the model
+    verbose = False
     with torch.no_grad():
         if verbose:
             from time import time
