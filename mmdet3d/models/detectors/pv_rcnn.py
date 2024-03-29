@@ -2,6 +2,8 @@
 import copy
 from typing import Optional
 
+from torch.profiler import record_function
+
 from mmdet3d.registry import MODELS
 from mmdet3d.structures.det3d_data_sample import SampleList
 from mmdet3d.utils import InstanceList
@@ -89,27 +91,32 @@ class PointVoxelRCNN(TwoStage3DDetector):
                 - bboxes_3d (Tensor): Contains a tensor with shape
                     (num_instances, C) where C >=7.
         """
-        feats_dict = self.extract_feat(batch_inputs_dict)
+        with record_function("SMPL-predict-extract"):
+            feats_dict = self.extract_feat(batch_inputs_dict)
         if self.with_rpn:
-            rpn_results_list = self.rpn_head.predict(feats_dict,
-                                                     batch_data_samples)
+            with record_function("SMPL-predict-rpnhead"):
+                rpn_results_list = self.rpn_head.predict(feats_dict,
+                                                         batch_data_samples)
         else:
             rpn_results_list = [
                 data_sample.proposals for data_sample in batch_data_samples
             ]
 
         # extrack points feats by points_encoder
-        points_feats_dict = self.extract_points_feat(batch_inputs_dict,
-                                                     feats_dict,
-                                                     rpn_results_list)
+        with record_function("SMPL-predict-extractpointsfeat"):
+            points_feats_dict = self.extract_points_feat(batch_inputs_dict,
+                                                         feats_dict,
+                                                         rpn_results_list)
 
-        results_list_3d = self.roi_head.predict(points_feats_dict,
-                                                rpn_results_list,
-                                                batch_data_samples)
+        with record_function("SMPL-predict-rpnhead"):
+            results_list_3d = self.roi_head.predict(points_feats_dict,
+                                                    rpn_results_list,
+                                                    batch_data_samples)
 
         # connvert to Det3DDataSample
-        results_list = self.add_pred_to_datasample(batch_data_samples,
-                                                   results_list_3d)
+        with record_function("SMPL-predict-addpred"):
+            results_list = self.add_pred_to_datasample(batch_data_samples,
+                                                       results_list_3d)
 
         return results_list
 
@@ -135,16 +142,20 @@ class PointVoxelRCNN(TwoStage3DDetector):
         """
         feats_dict = dict()
         voxel_dict = batch_inputs_dict['voxels']
-        voxel_features = self.voxel_encoder(voxel_dict['voxels'],
-                                            voxel_dict['num_points'],
-                                            voxel_dict['coors'])
+        with record_function("SMPL-predict-extract-voxel"):
+            voxel_features = self.voxel_encoder(voxel_dict['voxels'],
+                                                voxel_dict['num_points'],
+                                                voxel_dict['coors'])
         batch_size = voxel_dict['coors'][-1, 0].item() + 1
-        feats_dict['spatial_feats'], feats_dict[
-            'multi_scale_3d_feats'] = self.middle_encoder(
-                voxel_features, voxel_dict['coors'], batch_size)
-        x = self.backbone(feats_dict['spatial_feats'])
+        with record_function("SMPL-predict-extract-middle"):
+            feats_dict['spatial_feats'], feats_dict[
+                'multi_scale_3d_feats'] = self.middle_encoder(
+                    voxel_features, voxel_dict['coors'], batch_size)
+        with record_function("SMPL-predict-extract-backbone"):
+            x = self.backbone(feats_dict['spatial_feats'])
         if self.with_neck:
-            neck_feats = self.neck(x)
+            with record_function("SMPL-predict-extract-neck"):
+                neck_feats = self.neck(x)
             feats_dict['neck_feats'] = neck_feats
         return feats_dict
 

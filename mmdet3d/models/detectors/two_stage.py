@@ -2,6 +2,8 @@
 import copy
 from typing import Union
 
+from torch.profiler import record_function
+
 from mmdet3d.registry import MODELS
 from mmdet3d.utils import ConfigType, OptConfigType, OptMultiConfig
 from ...structures.det3d_data_sample import SampleList
@@ -147,23 +149,27 @@ class TwoStage3DDetector(Base3DDetector):
             - bboxes_3d (Tensor): Contains a tensor with shape
                 (num_instances, C) where C >=7.
         """
-        feats_dict = self.extract_feat(batch_inputs_dict)
+        with record_function("SMPL-predict-extract"):
+            feats_dict = self.extract_feat(batch_inputs_dict)
 
         if self.with_rpn:
-            rpn_results_list = self.rpn_head.predict(feats_dict,
-                                                     batch_data_samples)
+            with record_function("SMPL-predict-rpnhead"):
+                rpn_results_list = self.rpn_head.predict(feats_dict,
+                                                         batch_data_samples)
 
         else:
             rpn_results_list = [
                 data_sample.proposals for data_sample in batch_data_samples
             ]
 
-        results_list = self.roi_head.predict(feats_dict, rpn_results_list,
-                                             batch_data_samples)
+        with record_function("SMPL-predict-roihead"):
+            results_list = self.roi_head.predict(feats_dict, rpn_results_list,
+                                                 batch_data_samples)
 
         # connvert to Det3DDataSample
-        results_list = self.add_pred_to_datasample(batch_data_samples,
-                                                   results_list)
+        with record_function("SMPL-predict-addpred"):
+            results_list = self.add_pred_to_datasample(batch_data_samples,
+                                                       results_list)
 
         return results_list
 

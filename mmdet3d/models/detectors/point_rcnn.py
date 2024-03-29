@@ -2,6 +2,7 @@
 from typing import Dict, Optional
 
 import torch
+from torch.profiler import record_function
 
 from mmdet3d.registry import MODELS
 from .two_stage import TwoStage3DDetector
@@ -57,10 +58,12 @@ class PointRCNN(TwoStage3DDetector):
             dict: Features from the backbone+neck and raw points.
         """
         points = torch.stack(batch_inputs_dict['points'])
-        x = self.backbone(points)
+        with record_function("SMPL-predict-extract-backbone"):
+            x = self.backbone(points)
 
         if self.with_neck:
-            x = self.neck(x)
+            with record_function("SMPL-predict-extract-neck"):
+                x = self.neck(x)
         return dict(
             fp_features=x['fp_features'].clone(),
             fp_points=x['fp_xyz'].clone(),

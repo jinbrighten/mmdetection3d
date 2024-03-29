@@ -9,6 +9,7 @@ import mmengine
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.profiler import profile, ProfilerActivity, schedule
 from mmengine.config import Config
 from mmengine.dataset import Compose, pseudo_collate
 from mmengine.registry import init_default_scope
@@ -182,22 +183,18 @@ def inference_detector(model: nn.Module,
         print(f'Number of points: {collate_data["inputs"]["points"][0].shape[0]}')
 
     # forward the model
-    verbose = False
+    verbose = True
     with torch.no_grad():
         if verbose:
-            from time import time
-            warmup = 5
-            for _ in range(warmup):
-                _ = model.test_step(collate_data)
-
-            repeat = 10
-            avg = 0
-            for _ in range(repeat):
-                start = time()
-                results = model.test_step(collate_data)
-                avg += time() - start
-            avg /= repeat
-            print(f'Latency: {avg * 1000:.2f} ms')
+            profile_schedule = schedule(wait=0, warmup=5, active=10, repeat=1)
+            def trace_handler(p):
+                output = p.key_averages()
+                output = output.table(sort_by='cpu_time')
+                print(output)
+            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], schedule=profile_schedule, on_trace_ready=trace_handler) as prof:
+                for idx in range(15):
+                    results = model.test_step(collate_data)
+                    prof.step()
         else:
             results = model.test_step(collate_data)
 

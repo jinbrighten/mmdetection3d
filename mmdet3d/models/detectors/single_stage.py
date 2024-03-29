@@ -3,6 +3,7 @@ from typing import Dict, List, Tuple, Union
 
 import torch
 from torch import Tensor
+from torch.profiler import record_function
 
 from mmdet3d.registry import MODELS
 from mmdet3d.utils import ConfigType, OptConfigType, OptMultiConfig
@@ -106,10 +107,13 @@ class SingleStage3DDetector(Base3DDetector):
                 - bboxes_3d (Tensor): Contains a tensor with shape
                     (num_instances, C) where C >=7.
         """
-        x = self.extract_feat(batch_inputs_dict)
-        results_list = self.bbox_head.predict(x, batch_data_samples, **kwargs)
-        predictions = self.add_pred_to_datasample(batch_data_samples,
-                                                  results_list)
+        with record_function("SMPL-predict-extract"):
+            x = self.extract_feat(batch_inputs_dict)
+        with record_function("SMPL-predict-bboxhead"):
+            results_list = self.bbox_head.predict(x, batch_data_samples, **kwargs)
+        with record_function("SMPL-predict-addpred"):
+            predictions = self.add_pred_to_datasample(batch_data_samples,
+                                                      results_list)
         return predictions
 
     def _forward(self,
@@ -157,7 +161,9 @@ class SingleStage3DDetector(Base3DDetector):
         """
         points = batch_inputs_dict['points']
         stack_points = torch.stack(points)
-        x = self.backbone(stack_points)
+        with record_function("SMPL-predict-extract-backbone"):
+            x = self.backbone(stack_points)
         if self.with_neck:
-            x = self.neck(x)
+            with record_function("SMPL-predict-extract-neck"):
+                x = self.neck(x)
         return x

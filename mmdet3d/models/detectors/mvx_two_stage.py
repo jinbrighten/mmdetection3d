@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Sequence
 import torch
 from mmengine.structures import InstanceData
 from torch import Tensor
+from torch.profiler import record_function
 
 from mmdet3d.registry import MODELS
 from mmdet3d.structures import Det3DDataSample
@@ -206,16 +207,20 @@ class MVXTwoStageDetector(Base3DDetector):
         """
         if not self.with_pts_bbox:
             return None
-        voxel_features = self.pts_voxel_encoder(voxel_dict['voxels'],
-                                                voxel_dict['num_points'],
-                                                voxel_dict['coors'], img_feats,
-                                                batch_input_metas)
+        with record_function("SMPL-predict-extract-pts-voxel"):
+            voxel_features = self.pts_voxel_encoder(voxel_dict['voxels'],
+                                                    voxel_dict['num_points'],
+                                                    voxel_dict['coors'], img_feats,
+                                                    batch_input_metas)
         batch_size = voxel_dict['coors'][-1, 0] + 1
-        x = self.pts_middle_encoder(voxel_features, voxel_dict['coors'],
-                                    batch_size)
-        x = self.pts_backbone(x)
+        with record_function("SMPL-predict-extract-pts-middle"):
+            x = self.pts_middle_encoder(voxel_features, voxel_dict['coors'],
+                                        batch_size)
+        with record_function("SMPL-predict-extract-pts-backbone"):
+            x = self.pts_backbone(x)
         if self.with_pts_neck:
-            x = self.pts_neck(x)
+            with record_function("SMPL-predict-extract-pts-neck"):
+                x = self.pts_neck(x)
         return x
 
     def extract_feat(self, batch_inputs_dict: dict,
@@ -238,12 +243,14 @@ class MVXTwoStageDetector(Base3DDetector):
         voxel_dict = batch_inputs_dict.get('voxels', None)
         imgs = batch_inputs_dict.get('imgs', None)
         points = batch_inputs_dict.get('points', None)
-        img_feats = self.extract_img_feat(imgs, batch_input_metas)
-        pts_feats = self.extract_pts_feat(
-            voxel_dict,
-            points=points,
-            img_feats=img_feats,
-            batch_input_metas=batch_input_metas)
+        with record_function("SMPL-predict-extract-img"):
+            img_feats = self.extract_img_feat(imgs, batch_input_metas)
+        with record_function("SMPL-predict-extract-pts"):
+            pts_feats = self.extract_pts_feat(
+                voxel_dict,
+                points=points,
+                img_feats=img_feats,
+                batch_input_metas=batch_input_metas)
         return (img_feats, pts_feats)
 
     def loss(self, batch_inputs_dict: Dict[List, torch.Tensor],
@@ -386,22 +393,26 @@ class MVXTwoStageDetector(Base3DDetector):
                 contains a tensor with shape (num_instances, 7).
         """
         batch_input_metas = [item.metainfo for item in batch_data_samples]
-        img_feats, pts_feats = self.extract_feat(batch_inputs_dict,
-                                                 batch_input_metas)
+        with record_function("SMPL-predict-extract"):
+            img_feats, pts_feats = self.extract_feat(batch_inputs_dict,
+                                                     batch_input_metas)
         if pts_feats and self.with_pts_bbox:
-            results_list_3d = self.pts_bbox_head.predict(
-                pts_feats, batch_data_samples, **kwargs)
+            with record_function("SMPL-predict-bboxhead"):
+                results_list_3d = self.pts_bbox_head.predict(
+                    pts_feats, batch_data_samples, **kwargs)
         else:
             results_list_3d = None
 
         if img_feats and self.with_img_bbox:
             # TODO check this for camera modality
-            results_list_2d = self.predict_imgs(img_feats, batch_data_samples,
-                                                **kwargs)
+            with record_function("SMPL-predict-imgs"):
+                results_list_2d = self.predict_imgs(img_feats, batch_data_samples,
+                                                    **kwargs)
         else:
             results_list_2d = None
 
-        detsamples = self.add_pred_to_datasample(batch_data_samples,
-                                                 results_list_3d,
-                                                 results_list_2d)
+        with record_function("SMPL-predict-addpred"):
+            detsamples = self.add_pred_to_datasample(batch_data_samples,
+                                                     results_list_3d,
+                                                     results_list_2d)
         return detsamples

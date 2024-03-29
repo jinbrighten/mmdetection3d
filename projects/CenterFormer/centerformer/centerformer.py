@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 import torch
 from torch import Tensor
 from torch.nn.modules.batchnorm import _BatchNorm
+from torch.profiler import record_function
 
 from mmdet3d.models.detectors import Base3DDetector
 from mmdet3d.registry import MODELS
@@ -112,10 +113,13 @@ class CenterFormer(Base3DDetector):
              image features and point cloud features.
         """
         voxel_dict = batch_inputs_dict.get('voxels', None)
-        voxel_features, feature_coors = self.voxel_encoder(
-            voxel_dict['voxels'], voxel_dict['coors'])
+        with record_function("SMPL-predict-extract-voxel"):
+            voxel_features, feature_coors = self.voxel_encoder(
+                voxel_dict['voxels'], voxel_dict['coors'])
         batch_size = voxel_dict['coors'][-1, 0].item() + 1
-        x = self.middle_encoder(voxel_features, feature_coors, batch_size)
+
+        with record_function("SMPL-predict-extract-middle"):
+            x = self.middle_encoder(voxel_features, feature_coors, batch_size)
 
         return x
 
@@ -169,12 +173,16 @@ class CenterFormer(Base3DDetector):
                 contains a tensor with shape (num_instances, 7).
         """
         batch_input_metas = [item.metainfo for item in batch_data_samples]
-        pts_feats = self.extract_feat(batch_inputs_dict, batch_input_metas)
-        preds, _ = self.backbone(pts_feats, batch_data_samples)
+        with record_function("SMPL-predict-extract"):
+            pts_feats = self.extract_feat(batch_inputs_dict, batch_input_metas)
+        with record_function("SMPL-predict-backbone"):
+            preds, _ = self.backbone(pts_feats, batch_data_samples)
 
-        preds = self.bbox_head(preds)
-        results_list_3d = self.bbox_head.predict(preds, batch_input_metas)
+        with record_function("SMPL-predict-bboxhead"):
+            preds = self.bbox_head(preds)
+            results_list_3d = self.bbox_head.predict(preds, batch_input_metas)
 
-        detsamples = self.add_pred_to_datasample(batch_data_samples,
-                                                 results_list_3d)
+        with record_function("SMPL-predict-addpred"):
+            detsamples = self.add_pred_to_datasample(batch_data_samples,
+                                                     results_list_3d)
         return detsamples

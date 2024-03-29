@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Union
 
 from mmengine.structures import InstanceData
 from torch import Tensor
+from torch.profiler import record_function
 
 from mmdet3d.registry import MODELS
 from mmdet3d.structures import Det3DDataSample
@@ -95,12 +96,15 @@ class VoteNet(SingleStage3DDetector):
                 - bboxes_3d (:obj:`BaseInstance3DBoxes`): Prediction of bboxes,
                     contains a tensor with shape (num_instances, 7).
         """
-        feats_dict = self.extract_feat(batch_inputs_dict)
+        with record_function("SMPL-predict-extract"):
+            feats_dict = self.extract_feat(batch_inputs_dict)
         points = batch_inputs_dict['points']
-        results_list = self.bbox_head.predict(points, feats_dict,
-                                              batch_data_samples, **kwargs)
-        data_3d_samples = self.add_pred_to_datasample(batch_data_samples,
-                                                      results_list)
+        with record_function("SMPL-predict-bboxhead"):
+            results_list = self.bbox_head.predict(points, feats_dict,
+                                                  batch_data_samples, **kwargs)
+        with record_function("SMPL-predict-addpred"):
+            data_3d_samples = self.add_pred_to_datasample(batch_data_samples,
+                                                          results_list)
         return data_3d_samples
 
     def aug_test(self, aug_inputs_list: List[dict],

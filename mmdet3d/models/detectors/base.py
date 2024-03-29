@@ -1,6 +1,8 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from typing import List, Union
 
+from torch.profiler import record_function
+
 from mmdet.models import BaseDetector
 from mmengine.structures import InstanceData
 
@@ -71,6 +73,9 @@ class Base3DDetector(BaseDetector):
             - If ``mode="predict"``, return a list of :obj:`Det3DDataSample`.
             - If ``mode="loss"``, return a dict of tensor.
         """
+        # if "inputs" in inputs:
+        #     mode = inputs["mode"]
+        #     inputs = inputs["inputs"]
         if mode == 'loss':
             return self.loss(inputs, data_samples, **kwargs)
         elif mode == 'predict':
@@ -83,7 +88,10 @@ class Base3DDetector(BaseDetector):
                                                   'time augmentation.'
                 return self.aug_test(inputs, data_samples, **kwargs)
             else:
-                return self.predict(inputs, data_samples, **kwargs)
+                with record_function("SMPL-predict"):
+                    result = self.predict(inputs, data_samples, **kwargs)
+                # return self.predict(inputs, data_samples, **kwargs)
+                return result
         elif mode == 'tensor':
             return self._forward(inputs, data_samples, **kwargs)
         else:

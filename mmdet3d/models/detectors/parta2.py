@@ -1,6 +1,8 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from typing import Dict, Optional
 
+from torch.profiler import record_function
+
 from mmdet3d.registry import MODELS
 from .two_stage import TwoStage3DDetector
 
@@ -52,15 +54,19 @@ class PartA2(TwoStage3DDetector):
                 features will be obtained.
         """
         voxel_dict = batch_inputs_dict['voxels']
-        voxel_features = self.voxel_encoder(voxel_dict['voxels'],
-                                            voxel_dict['num_points'],
-                                            voxel_dict['coors'])
+        with record_function("SMPL-predict-extract-voxel"):
+            voxel_features = self.voxel_encoder(voxel_dict['voxels'],
+                                                voxel_dict['num_points'],
+                                                voxel_dict['coors'])
         batch_size = voxel_dict['coors'][-1, 0].item() + 1
-        feats_dict = self.middle_encoder(voxel_features, voxel_dict['coors'],
-                                         batch_size)
-        x = self.backbone(feats_dict['spatial_features'])
+        with record_function("SMPL-predict-extract-middle"):
+            feats_dict = self.middle_encoder(voxel_features, voxel_dict['coors'],
+                                             batch_size)
+        with record_function("SMPL-predict-extract-backbone"):
+            x = self.backbone(feats_dict['spatial_features'])
         if self.with_neck:
-            neck_feats = self.neck(x)
-            feats_dict.update({'neck_feats': neck_feats})
+            with record_function("SMPL-predict-extract-neck"):
+                neck_feats = self.neck(x)
+                feats_dict.update({'neck_feats': neck_feats})
         feats_dict['voxels_dict'] = voxel_dict
         return feats_dict
