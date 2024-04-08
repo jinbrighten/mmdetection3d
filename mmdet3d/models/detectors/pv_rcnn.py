@@ -108,7 +108,7 @@ class PointVoxelRCNN(TwoStage3DDetector):
                                                          feats_dict,
                                                          rpn_results_list)
 
-        with record_function("SMPL-predict-rpnhead"):
+        with record_function("SMPL-predict-roihead"):
             results_list_3d = self.roi_head.predict(points_feats_dict,
                                                     rpn_results_list,
                                                     batch_data_samples)
