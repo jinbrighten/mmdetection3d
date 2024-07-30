@@ -177,14 +177,27 @@ def inference_detector(model: nn.Module,
 
     collate_data = pseudo_collate(data)
 
-    # forward the model
     with torch.no_grad():
-        results = model.test_step(collate_data)
-
+        starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+        repetitions = 10
+        timings=np.zeros((repetitions,1))
+        for warmup in range(5):
+            results = model.test_step(collate_data)
+            
+        for rep in range(repetitions):
+            starter.record()
+            results = model.test_step(collate_data)
+            ender.record()
+            # WAIT FOR GPU SYNC
+            torch.cuda.synchronize()
+            curr_time = starter.elapsed_time(ender)
+            timings[rep] = curr_time
+        print(f'Number of points: {collate_data["inputs"]["points"][0].shape[0]}')
+        print("Average inference time: {}".format(timings.mean()))
     if not is_batch:
-        return results[0], data[0]
+        return results[0], timings.mean()
     else:
-        return results, data
+        return results, timings.mean()
 
 
 def inference_multi_modality_detector(model: nn.Module,
